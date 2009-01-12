@@ -67,7 +67,12 @@ module Shoulda # :nodoc:
 
         attributes.each do |attribute|
           should "require #{attribute} to be set" do
-            assert_bad_value(klass, attribute, nil, message)
+            reflection = klass.reflect_on_association(attribute)
+            if reflection && [:has_many, :has_and_belongs_to_many].include?(reflection.macro)
+              assert_bad_value(klass, attribute, [], message)
+            else
+              assert_bad_value(klass, attribute, nil, message)
+            end
           end
         end
       end
@@ -76,28 +81,34 @@ module Shoulda # :nodoc:
       # Requires an existing record
       #
       # Options:
+
       # * <tt>:message</tt> - value the test expects to find in <tt>errors.on(:attribute)</tt>.
       #   Regexp or string.  Default = <tt>I18n.translate('activerecord.errors.messages.taken')</tt>
       # * <tt>:scoped_to</tt> - field(s) to scope the uniqueness to.
+      # * <tt>:case_sensitive</tt> - whether or not uniqueness is defined by an
+      #   exact match. Ignored by non-text attributes. Default = <tt>true</tt>
       #
       # Examples:
       #   should_require_unique_attributes :keyword, :username
       #   should_require_unique_attributes :name, :message => "O NOES! SOMEONE STOELED YER NAME!"
       #   should_require_unique_attributes :email, :scoped_to => :name
       #   should_require_unique_attributes :address, :scoped_to => [:first_name, :last_name]
+      #   should_require_unique_attributes :email, :case_sensitive => false
       #
       def should_require_unique_attributes(*attributes)
-        message, scope = get_options!(attributes, :message, :scoped_to)
+        message, scope, case_sensitive = get_options!(attributes, :message, :scoped_to, :case_sensitive)
         scope = [*scope].compact
         message ||= default_error_message(:taken)
+        case_sensitive = true if case_sensitive.nil?
 
         klass = model_class
         attributes.each do |attribute|
           attribute = attribute.to_sym
-          should "require unique value for #{attribute}#{" scoped to #{scope.join(', ')}" unless scope.blank?}" do
+          should "require#{' case insensitive' unless case_sensitive} unique value for #{attribute}#{" scoped to #{scope.join(', ')}" unless scope.blank?}" do
             assert existing = klass.find(:first), "Can't find first #{klass}"
             object = klass.new
             existing_value = existing.send(attribute)
+            existing_value.swapcase! if existing_value.respond_to?(:swapcase!) unless case_sensitive
 
             if !scope.blank?
               scope.each do |s|
@@ -105,6 +116,7 @@ module Shoulda # :nodoc:
                 object.send("#{s}=", existing.send(s))
               end
             end
+
             assert_bad_value(object, attribute, existing_value, message)
 
             # Now test that the object is valid when changing the scoped attribute
@@ -525,7 +537,7 @@ module Shoulda # :nodoc:
       #   should_belong_to :parent
       #
       def should_belong_to(*associations)
-        get_options!(associations)
+        dependent = get_options!(associations, :dependent)
         klass = model_class
         associations.each do |association|
           should "belong_to #{association}" do
@@ -537,6 +549,12 @@ module Shoulda # :nodoc:
               associated_klass = (reflection.options[:class_name] || association.to_s.camelize).constantize
               fk = reflection.options[:foreign_key] || reflection.primary_key_name
               assert klass.column_names.include?(fk.to_s), "#{klass.name} does not have a #{fk} foreign key."
+            end
+
+            if dependent
+              assert_equal dependent.to_s,
+                           reflection.options[:dependent].to_s,
+                           "#{association} should have #{dependent} dependency"
             end
           end
         end
@@ -610,17 +628,34 @@ module Shoulda # :nodoc:
       # Ensures that there are DB indices on the given columns or tuples of columns.
       # Also aliased to should_have_index for readability
       #
+      # Options:
+      # * <tt>:unique</tt> - whether or not the index has a unique
+      #   constraint. Use <tt>true</tt> to explicitly test for a unique
+      #   constraint.  Use <tt>false</tt> to explicitly test for a non-unique
+      #   constraint. Use <tt>nil</tt> if you don't care whether the index is
+      #   unique or not.  Default = <tt>nil</tt>
+      #
+      # Examples:
+      #
       #   should_have_indices :email, :name, [:commentable_type, :commentable_id]
       #   should_have_index :age
+      #   should_have_index :ssn, :unique => true
       #
       def should_have_indices(*columns)
+        unique = get_options!(columns, :unique)
         table = model_class.table_name
-        indices = ::ActiveRecord::Base.connection.indexes(table).map(&:columns)
+        indices = ::ActiveRecord::Base.connection.indexes(table)
+        index_types = { true => "unique", false => "non-unique" }
+        index_type = index_types[unique] || "an"
 
         columns.each do |column|
-          should "have index on #{table} for #{column.inspect}" do
+          should "have #{index_type} index on #{table} for #{column.inspect}" do
             columns = [column].flatten.map(&:to_s)
-            assert_contains(indices, columns)
+            index = indices.detect {|ind| ind.columns == columns }
+            assert index, "#{table} does not have an index for #{column.inspect}"
+            if [true, false].include?(unique)
+              assert_equal unique, index.unique, "Expected #{index_type} index but was #{index_types[index.unique]}."
+            end
           end
         end
       end

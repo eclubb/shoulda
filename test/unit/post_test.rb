@@ -12,4 +12,8 @@ class PostTest < Test::Unit::TestCase
   should_require_attributes :body, :message => /wtf/
   should_require_attributes :title
   should_only_allow_numeric_values_for :user_id
+
+  should_fail do
+    should_require_unique_attributes :title, :case_sensitive => false
+  end
 end
