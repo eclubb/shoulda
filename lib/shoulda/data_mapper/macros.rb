@@ -11,11 +11,15 @@ module Shoulda # :nodoc:
       def default_error_message(key, field, *values)
         ::DataMapper::Validate::ValidationErrors.default_error_message(key, field, *values)
       end
+
+      def n
+        1.0/0
+      end
     end
 
-    # = Macro test helpers for your active record models
+    # = Macro test helpers for your DataMapper models
     #
-    # These helpers will test most of the validations and associations for your ActiveRecord models.
+    # These helpers will test most of the validations and associations for your DataMapper models.
     #
     #   class UserTest < Test::Unit::TestCase
     #     should_require_attributes :name, :phone_number
@@ -235,7 +239,6 @@ module Shoulda # :nodoc:
         min_length = range.first
         max_length = range.last
         same_length = (min_length == max_length)
-        n = 1.0/0
 
         if min_length != -n && max_length != n
           short_message = long_message = between_message
@@ -362,8 +365,8 @@ module Shoulda # :nodoc:
                                  :low_message, :high_message, :between_message)
         low_precision, high_precision, low_message, high_message, between_message = o
 
-        low_message     ||= default_error_message(:greater_than, attribute, set.first)
-        high_message    ||= default_error_message(:less_than, attribute, set.last)
+        low_message     ||= default_error_message(:greater_than_or_equal_to, attribute, set.first)
+        high_message    ||= default_error_message(:less_than_or_equal_to, attribute, set.last)
         between_message ||= default_error_message(:value_between, attribute, set.first, set.last)
         low_precision   ||= 1
         high_precision  ||= 1
@@ -371,7 +374,6 @@ module Shoulda # :nodoc:
         klass = model_class
         min   = set.first
         max   = set.last
-        n     = 1.0/0
 
         if min != -n && max != n
           low_message = high_message = between_message

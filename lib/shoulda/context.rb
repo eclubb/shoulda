@@ -1,6 +1,6 @@
 module Shoulda
   class << self
-    attr_accessor :contexts
+    attr_writer :contexts
     def contexts # :nodoc:
       @contexts ||= []
     end
