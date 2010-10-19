@@ -7,7 +7,8 @@ module Shoulda # :nodoc:
       opts = (args.last.is_a?(Hash) ? args.pop : {})
       wanted.each {|w| ret << opts.delete(w)}
       raise ArgumentError, "Unsupported options given: #{opts.keys.join(', ')}" unless opts.keys.empty?
-      return *ret
+      ret = ret[0] if ret.length == 1
+      return ret
     end
 
     # Returns the model class constant, as determined by the test class name.
